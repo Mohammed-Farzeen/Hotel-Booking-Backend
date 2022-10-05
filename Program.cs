@@ -66,15 +66,12 @@ app.MapDelete("/rooms/{id}", async (int id, BookingDb db) =>
     return Results.NotFound();
 });
 
-app.MapGet("/booking", async (BookingDb db) =>
-    await db.Bookings.Include(b => b.room).ToListAsync()
-);
 
 app.MapPost("/get-rooms", async (Booking booking, BookingDb db) =>
 {
     var room = await db.Rooms.Include(r=>r.bookings).Where(r => (
         r.adultCapacity >= booking.numberOfAdults &&
-        r.childCapacity >= booking.numberOfChild &&
+        r.childCapacity >= booking.numberOfChildren &&
         r.bookings.Where(b=>DateTime.Compare(b.checkInDate,booking.checkInDate) >-1).SingleOrDefault() == null
         )).FirstOrDefaultAsync();
     if (room is null)
@@ -83,6 +80,25 @@ app.MapPost("/get-rooms", async (Booking booking, BookingDb db) =>
     }
     return Results.Ok(room);
 }
+);
+
+
+app.MapGet("/booking", async (BookingDb db) =>
+    await db.Bookings.Include(b => b.room).ToListAsync()
+);
+
+app.MapGet("/booking/{id}", async (int id, BookingDb db) =>
+    await db.Bookings.Include(b => b.room).SingleOrDefaultAsync(b=>b.id==id)
+        is Booking booking
+            ? Results.Ok(booking)
+            : Results.NotFound());
+
+app.MapGet("/booking/today-check-in", async (BookingDb db) =>
+    await db.Bookings.Where(b=>b.checkInDate == DateTime.Today).Include(b => b.room).ToListAsync()
+);
+
+app.MapGet("/booking/today-check-out", async (BookingDb db) =>
+    await db.Bookings.Where(b=>b.checkOutDate == DateTime.Today).Include(b => b.room).ToListAsync()
 );
 
 app.MapPost("/booking", async (Booking booking, BookingDb db) =>
@@ -100,6 +116,13 @@ app.MapPut("/booking", async (BookingStatusDM inputBooking, BookingDb db) =>
     var booking = await db.Bookings.SingleOrDefaultAsync(b => b.id == inputBooking.id);
 
     if (booking is null) return Results.NotFound();
+
+    if(inputBooking.status == "Check Out"){
+        booking.checkOutDate =  DateTime.Today;
+    }
+    if(inputBooking.status == "Check In"){
+        booking.checkInDate =  DateTime.Today;
+    }
 
     booking.status = inputBooking.status;
     await db.SaveChangesAsync();
@@ -140,7 +163,7 @@ class Booking
     public string? guestFirstName { get; set; }
     public string? guestLastName { get; set; }
     public int numberOfAdults { get; set; }
-    public int numberOfChild { get; set; }
+    public int numberOfChildren { get; set; }
     public DateTime checkInDate { get; set; }
     public DateTime checkOutDate { get; set; }
     public string? status { get; set; }
